@@ -1309,7 +1309,8 @@
     "name": "silcoon"
   },
   {
-    "name": "beautifly"
+    "name": "beautifly",
+    "tier": 3
   },
   {
     "name": "cascoon"
@@ -2227,7 +2228,8 @@
     "name": "purrloin"
   },
   {
-    "name": "liepard"
+    "name": "liepard",
+    "tier": 2
   },
   {
     "name": "pansage"
