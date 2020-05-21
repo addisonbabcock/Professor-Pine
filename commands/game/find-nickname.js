@@ -30,8 +30,11 @@ class FindNicknameCommand extends Commando.Command {
     });
 
     client.dispatcher.addInhibitor(message => {
-      if (!!message.command && message.command.name === 'auto' && !Helper.isBotChannel(message)) {
-        return ['invalid-channel', message.reply(Helper.getText('find-username.warning', message))];
+      if (!!message.command && message.command.name === 'find-nickname' && !Helper.isBotChannel(message)) {
+        return {
+          reason: 'invalid-channel',
+          response: message.reply(Helper.getText('find-nickname.warning', message))
+        };
       }
       return false;
     });

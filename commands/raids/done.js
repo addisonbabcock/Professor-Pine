@@ -22,25 +22,34 @@ class DoneCommand extends Commando.Command {
 
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'done' &&
-        !PartyManager.validParty(message.channel.id, [PartyType.RAID, PartyType.RAID_TRAIN])) {
-        return ['invalid-channel', message.reply('Say you have completed a raid from its raid channel!')];
+        !PartyManager.validParty(message.channel.id)) {
+        return {
+          reason: 'invalid-channel',
+          response: message.reply('Say you have completed a raid from its raid channel!')
+        };
       }
       return false;
     });
   }
 
   async run(message, args) {
-    const party = PartyManager.getParty(message.channel.id);
+    const {isReaction, reactionMemberId} = args,
+      memberId = reactionMemberId || message.member.id,
+      party = PartyManager.getParty(message.channel.id);
 
     if (party.type === PartyType.RAID) {
-      party.setPresentAttendeesToComplete(undefined, message.member.id)
+      await party.setPresentAttendeesToComplete(undefined, memberId)
         .catch(err => log.error(err));
     } else {
-      party.removeAttendee(message.member.id);
+      await party.removeAttendee(memberId);
+      party.refreshStatusMessages()
+        .catch(err => log.error(err));
     }
 
-    message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
-      .catch(err => log.error(err));
+    if (!isReaction) {
+      message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
+        .catch(err => log.error(err));
+    }
   }
 }
 

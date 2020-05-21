@@ -23,23 +23,30 @@ class CheckOutCommand extends Commando.Command {
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'not-here' &&
         !PartyManager.validParty(message.channel.id)) {
-        return ['invalid-channel', message.reply('Check out of a raid from its raid channel!')];
+        return {
+          reason: 'invalid-channel',
+          response: message.reply('Check out of a raid from its raid channel!')
+        };
       }
       return false;
     });
   }
 
   async run(message, args) {
-    const raid = PartyManager.getParty(message.channel.id),
-      info = await raid.setMemberStatus(message.member.id, PartyStatus.INTERESTED);
+    const {isReaction, reactionMemberId} = args,
+      memberId = reactionMemberId || message.member.id,
+      raid = PartyManager.getParty(message.channel.id),
+      info = await raid.setMemberStatus(memberId, PartyStatus.INTERESTED);
 
     if (!info.error) {
-      message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
-        .catch(err => log.error(err));
+      if (!isReaction) {
+        message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
+          .catch(err => log.error(err));
+      }
 
       raid.refreshStatusMessages()
         .catch(err => log.error(err));
-    } else {
+    } else if (!isReaction) {
       message.reply(info.error)
         .catch(err => log.error(err));
     }

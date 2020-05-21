@@ -45,48 +45,62 @@ class TimeType extends Commando.ArgumentType {
     let firstPossibleTime,
       maxDuration,
       lastPossibleTime,
-      isTrain,
-      trainMeetingTime;
+      isTrainOrMeetup,
+      trainOrMeetupMeetingTime;
 
-    isTrain = (partyType === PartyType.RAID_TRAIN);
-    trainMeetingTime = isTrain ?
+    isTrainOrMeetup = (partyType === PartyType.RAID_TRAIN || partyType === PartyType.MEETUP);
+    trainOrMeetupMeetingTime = isTrainOrMeetup ?
       moment(party.startTime) :
       undefined;
 
     // Figure out valid first and last possible times for this time
     switch (arg.key) {
-      case TimeParameter.MEET:
-        // Start time - valid range is now (or hatch time if it exists, whichever is later)
-        // through raid's end time
+      case TimeParameter.MEET: {
+        switch (partyType) {
+          case PartyType.RAID: {
+            // Start time - valid range is now (or hatch time if it exists, whichever is later)
+            // through raid's end time
         const hatchTime = party ?
-          party.hatchTime :
-          undefined,
-          endTime = party ?
-            party.endTime :
-            undefined;
+                party.hatchTime :
+                undefined,
+              endTime = party ?
+                party.endTime :
+                undefined;
 
-        if (hatchTime) {
-          const hatchTimeMoment = moment(hatchTime);
+            if (hatchTime) {
+              const hatchTimeMoment = moment(hatchTime);
 
-          firstPossibleTime = now.isAfter(hatchTimeMoment) ?
-            now :
-            hatchTimeMoment;
-        } else {
-          firstPossibleTime = now;
-        }
+              firstPossibleTime = now.isAfter(hatchTimeMoment) ?
+                now :
+                hatchTimeMoment;
+            } else {
+              firstPossibleTime = now;
+            }
 
-        const partyEndTime = endTime !== TimeType.UNDEFINED_END_TIME ?
-          moment(endTime) :
-          partyCreationTime.clone().add(incubationDuration + hatchedDuration, 'minutes');
+            const partyEndTime = endTime !== TimeType.UNDEFINED_END_TIME ?
+              moment(endTime) :
+              partyCreationTime.clone().add(incubationDuration + hatchedDuration, 'minutes');
 
-        if (isTrain) {
-          maxDuration = settings.maximumMeetupLeadtime;
-          lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'days');
-        } else {
-          maxDuration = incubationDuration + hatchedDuration;
-          lastPossibleTime = partyEndTime;
+            if (isTrainOrMeetup) {
+              maxDuration = settings.maximumMeetupLeadtime;
+              lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'days');
+            } else {
+              maxDuration = incubationDuration + hatchedDuration;
+              lastPossibleTime = partyEndTime;
+            }
+            break;
+          }
+
+          case PartyType.RAID_TRAIN:
+          case PartyType.MEETUP: {
+            firstPossibleTime = partyCreationTime;
+            maxDuration = settings.maxMeetupLeadupDuration;
+            lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'minutes');
+            break;
+          }
         }
         break;
+      }
 
       case TimeParameter.HATCH: {
         // Hatch time - valid range is up to hatched duration in the past
@@ -97,11 +111,11 @@ class TimeType extends Commando.ArgumentType {
         break;
       }
 
-      case TimeParameter.END:
+      case TimeParameter.END: {
         // End time - valid range is now through incubation plus hatch duration past creation time
         firstPossibleTime = now;
 
-        if (isTrain) {
+        if (isTrainOrMeetup) {
           maxDuration = settings.maximumMeetupLeadtime + 1;
           lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'days');
         } else {
@@ -110,6 +124,7 @@ class TimeType extends Commando.ArgumentType {
         }
 
         break;
+      }
     }
 
     let valueToParse = value.trim(),
@@ -125,7 +140,7 @@ class TimeType extends Commando.ArgumentType {
     } else if (['unset', 'cancel', 'none'].indexOf(valueToParse.toLowerCase()) !== -1) {
       // mark this is a valid time.
       return true;
-    } else if (isTrain === true) {
+    } else if (isTrainOrMeetup === true) {
       timeMode = TimeMode.ABSOLUTE;
     } else {
       const absoluteMatch = valueToParse.match(/^at(.*)|(.*[ap]m?)$/i);
@@ -167,7 +182,7 @@ class TimeType extends Commando.ArgumentType {
       const enteredDate = moment(valueToParse, ['hmm a', 'Hmm', 'h:m a', 'H:m', 'M-D hmm a', 'M-D Hmm', 'M-D h:m a', 'M-D H:m', 'M-D h a', 'M-D H']);
 
       if (enteredDate.isValid()) {
-        possibleTimes.push(...TimeType.generateTimes(enteredDate, arg.key, partyType, isTrain ? trainMeetingTime : raidHatchTime));
+        possibleTimes.push(...TimeType.generateTimes(enteredDate, arg.key, partyType, isTrainOrMeetup ? trainOrMeetupMeetingTime : raidHatchTime));
       }
     }
 
@@ -187,7 +202,7 @@ class TimeType extends Commando.ArgumentType {
       firstPossibleFormattedTime = firstPossibleTime.calendar(null, calendarFormat),
       lastPossibleFormattedTime = lastPossibleTime.calendar(null, calendarFormat);
 
-    return `"${value}" is not valid for this raid - valid time range is between ${firstPossibleFormattedTime} and ${lastPossibleFormattedTime}!\n\n${arg.prompt}`;
+    return `"${value}" is not valid for this ${partyType} - valid time range is between ${firstPossibleFormattedTime} and ${lastPossibleFormattedTime}!\n\n${arg.prompt}`;
   }
 
   parse(value, message, arg) {
@@ -221,48 +236,62 @@ class TimeType extends Commando.ArgumentType {
     let firstPossibleTime,
       maxDuration,
       lastPossibleTime,
-      isTrain,
-      trainMeetingTime;
+      isTrainOrMeetup,
+      trainOrMeetupMeetingTime;
 
-    isTrain = (partyType === PartyType.RAID_TRAIN);
-    trainMeetingTime = isTrain ?
+    isTrainOrMeetup = (partyType === PartyType.RAID_TRAIN || partyType === PartyType.MEETUP);
+    trainOrMeetupMeetingTime = isTrainOrMeetup ?
       moment(party.startTime) :
       undefined;
 
     // Figure out valid first and last possible times for this time
     switch (arg.key) {
-      case TimeParameter.MEET:
-        // Start time - valid range is now (or hatch time if it exists, whichever is later)
-        // through raid's end time
+      case TimeParameter.MEET: {
+        switch (partyType) {
+          case PartyType.RAID: {
+            // Start time - valid range is now (or hatch time if it exists, whichever is later)
+            // through raid's end time
         const hatchTime = partyExists ?
-          party.hatchTime :
-          undefined,
+                party.hatchTime :
+                undefined,
           endTime = partyExists ?
-            party.endTime :
-            undefined;
+                party.endTime :
+                undefined;
 
-        if (hatchTime) {
-          const hatchTimeMoment = moment(hatchTime);
+            if (hatchTime) {
+              const hatchTimeMoment = moment(hatchTime);
 
-          firstPossibleTime = now.isAfter(hatchTimeMoment) ?
-            now :
-            hatchTimeMoment;
-        } else {
-          firstPossibleTime = now;
-        }
+              firstPossibleTime = now.isAfter(hatchTimeMoment) ?
+                now :
+                hatchTimeMoment;
+            } else {
+              firstPossibleTime = now;
+            }
 
-        const partyEndTime = endTime !== TimeType.UNDEFINED_END_TIME ?
-          moment(endTime) :
-          partyCreationTime.clone().add(incubationDuration + hatchedDuration, 'minutes');
+            const partyEndTime = endTime !== TimeType.UNDEFINED_END_TIME ?
+              moment(endTime) :
+              partyCreationTime.clone().add(incubationDuration + hatchedDuration, 'minutes');
 
-        if (isTrain) {
-          maxDuration = settings.maximumMeetupLeadtime;
-          lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'days');
-        } else {
-          maxDuration = incubationDuration + hatchedDuration;
-          lastPossibleTime = partyEndTime;
+            if (isTrainOrMeetup) {
+              maxDuration = settings.maximumMeetupLeadtime;
+              lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'days');
+            } else {
+              maxDuration = incubationDuration + hatchedDuration;
+              lastPossibleTime = partyEndTime;
+            }
+            break;
+          }
+
+          case PartyType.RAID_TRAIN:
+          case PartyType.MEETUP: {
+            firstPossibleTime = partyCreationTime;
+            maxDuration = settings.maxMeetupLeadupDuration;
+            lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'minutes');
+            break;
+          }
         }
         break;
+      }
 
       case TimeParameter.HATCH: {
         // Hatch time - valid range is up to hatched duration in the past
@@ -273,10 +302,10 @@ class TimeType extends Commando.ArgumentType {
         break;
       }
 
-      case TimeParameter.END:
+      case TimeParameter.END: {
         // End time - valid range is now through incubation plus hatch duration past creation time
         firstPossibleTime = now;
-        if (isTrain) {
+        if (isTrainOrMeetup) {
           maxDuration = settings.maximumMeetupLeadtime + 1;
           lastPossibleTime = partyCreationTime.clone().add(maxDuration, 'days');
         } else {
@@ -285,6 +314,7 @@ class TimeType extends Commando.ArgumentType {
         }
 
         break;
+      }
     }
 
     let valueToParse = value.trim(),
@@ -300,7 +330,7 @@ class TimeType extends Commando.ArgumentType {
     } else if (['unset', 'cancel', 'none'].indexOf(valueToParse.toLowerCase()) !== -1) {
       // return a value to indicate unset & meet.
       return -1;
-    } else if (isTrain === true) {
+    } else if (isTrainOrMeetup === true) {
       timeMode = TimeMode.ABSOLUTE;
     } else {
       const absoluteMatch = valueToParse.match(/^at(.*)|(.*[ap]m?)$/i);
@@ -342,7 +372,7 @@ class TimeType extends Commando.ArgumentType {
       const enteredDate = moment(valueToParse, ['hmm a', 'Hmm', 'h:m a', 'H:m', 'M-D hmm a', 'M-D Hmm', 'M-D h:m a', 'M-D H:m', 'M-D h a', 'M-D H']);
 
       if (enteredDate.isValid()) {
-        possibleTimes.push(...TimeType.generateTimes(enteredDate, arg.key, partyType, isTrain ? trainMeetingTime : raidHatchTime));
+        possibleTimes.push(...TimeType.generateTimes(enteredDate, arg.key, partyType, isTrainOrMeetup ? trainOrMeetupMeetingTime : raidHatchTime));
       }
     }
 
@@ -371,7 +401,7 @@ class TimeType extends Commando.ArgumentType {
       possibleDate.year(partyMeetingOrHatchTime.year());
     }
 
-    if (partyType === PartyType.RAID_TRAIN && timeParameter === TimeParameter.END && !containsDate && partyMeetingOrHatchTime !== undefined) {
+    if ((partyType === PartyType.RAID_TRAIN || partyType === PartyType.MEETUP) && timeParameter === TimeParameter.END && !containsDate && partyMeetingOrHatchTime !== undefined) {
       possibleDate.date(partyMeetingOrHatchTime.date());
       possibleDate.month(partyMeetingOrHatchTime.month());
       possibleDate.year(partyMeetingOrHatchTime.year());

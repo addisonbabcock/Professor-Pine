@@ -20,7 +20,8 @@ class DBManager {
         host: privateSettings.db.host,
         user: privateSettings.db.user,
         password: privateSettings.db.password,
-        database: privateSettings.db.schema
+        database: privateSettings.db.schema,
+        port: privateSettings.db.port || '3306',
       },
       migrations: {
         directory: './app/db'
@@ -41,7 +42,7 @@ class DBManager {
 
   async initialize(client) {
     await this.init();
-    client.guilds.forEach(guild =>
+    client.guilds.cache.forEach(guild =>
       this.insertIfAbsent('Guild', Object.assign({},
         {
           snowflake: guild.id

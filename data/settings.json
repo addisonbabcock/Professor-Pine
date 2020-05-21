@@ -3,11 +3,12 @@
   "standardRaidHatchedDuration": 45,
   "exclusiveRaidIncubateDuration": 20160,
   "exclusiveRaidHatchedDuration": 45,
+  "maxMeetupLeadupDuration": 30240,
   "maximumAdditionalAttendees": 20,
   "startClearTime": 10,
   "deletionGraceTime": 5,
   "deletionWarningTime": 10,
-  "trainDeletionWarningTime": 60,
+  "trainOrMeetupDeletionWarningTime": 60,
   "raidCompleteTimeout": 5,
   "maximumMeetupLeadtime": 93,
   "screenshotMessageOffsetTime": 45,
@@ -20,16 +21,59 @@
   "databaseRaids": true,
   "postNewGyms": true,
   "updater": {
-    "channelIndexUpdateIntervalSeconds": 600,
-    "gymPlacesIndexUpdateIntervalSeconds": 600
+    "channelIndexUpdateIntervalSeconds": 60,
+    "gymPlacesIndexUpdateIntervalSeconds": 60
   },
   "emoji": {
     "thumbsUp": "pinethumbsup",
     "thumbsDown": "pinethumbsdown",
-    "shiny": "pineshiny"
+    "shiny": "pineshiny",
+    "remote": "pineremote"
+  },
+  "reactionCommands": {
+    "interested": {
+      "custom": "pineinterested",
+      "plain": "🤔"
+    },
+    "join": {
+      "custom": "pinejoin",
+      "plain": "\uD83C\uDFC3"
+    },
+    "here": {
+      "custom": "pinehere",
+      "plain": "✅"
+    },
+    "done": {
+      "custom": "pinedone",
+      "plain": "\uD83C\uDF89"
+    },
+    "incrementCount": {
+      "custom": "",
+      "plain": "⬆️"
+    },
+    "decrementCount": {
+      "custom": "",
+      "plain": "⬇️"
+    },
+    "remote": {
+      "custom": "pineremote",
+      "plain": "\uD83D\uDCE1"
+    },
+    "notInterested": {
+      "custom": "pineleave",
+      "plain": "\uD83D\uDC4B"
+    }
+  },
+  "groupReactions": {
+    "A": "\uD83C\uDDE6",
+    "B": "\uD83C\uDDE7",
+    "C": "\uD83C\uDDE8",
+    "D": "\uD83C\uDDE9",
+    "E": "\uD83C\uDDEA"
   },
   "features": {
     "exGymChannel": true,
+    "reactionCommands": true,
     "notifications": true,
     "roles": true
   },
@@ -51,6 +95,7 @@
     "basic-raid",
     "raid-crud",
     "train",
+    "meetup",
     "roles",
     "notifications",
     "friends",

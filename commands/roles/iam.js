@@ -30,7 +30,10 @@ class IAmCommand extends Commando.Command {
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'iam' &&
         !Helper.isBotChannel(message)) {
-        return ['invalid-channel', message.reply(Helper.getText('iam.warning', message))];
+        return {
+          reason: 'invalid-channel',
+          response: message.reply(Helper.getText('iam.warning', message))
+        };
       }
       return false;
     });
@@ -132,7 +135,7 @@ class IAmCommand extends Commando.Command {
             '…');
         }
 
-        message.edit('Type `!iam <name>` to add one of the following roles to your account.',
+        return message.edit('Type `!iam <name>` to add one of the following roles to your account.',
           {embed})
           .then(botMessage => {
             this.messages.set(botMessage.id, {time: Date.now(), current, message: botMessage});
@@ -188,14 +191,13 @@ class IAmCommand extends Commando.Command {
               '…');
           }
 
-          message.channel.send(`Type \`${message.client.commandPrefix}iam <name>\` to add one of the following roles to your account.`,
+          return message.channel.send(`Type \`${message.client.commandPrefix}iam <name>\` to add one of the following roles to your account.`,
             {embed})
             .then(botMessage => {
               this.messages.set(botMessage.id, {time: Date.now(), current: 0, message: botMessage});
 
-              botMessage.react('⬅')
-                .then(reaction => botMessage.react('➡'))
-                .catch(err => log.error(err));
+              return botMessage.react('⬅')
+                .then(reaction => botMessage.react('➡'));
             });
         })
         .catch(err => {

@@ -1,9 +1,9 @@
 "use strict";
 
-const log = require('loglevel').getLogger('Raid'),
-  removeDiacritics = require('diacritics').remove,
+const log = require('loglevel').getLogger('RaidTrain'),
   moment = require('moment'),
   settings = require('../data/settings'),
+  text = require('../data/text.json'),
   {PartyStatus, PartyType} = require('./constants'),
   Discord = require('discord.js'),
   Helper = require('./helper'),
@@ -64,7 +64,7 @@ class RaidTrain extends Party {
         // move channel to end
         return newChannel.guild.setChannelPositions([{
           channel: newChannel,
-          position: newChannel.guild.channels.size - 1
+          position: newChannel.guild.channels.cache.size - 1
         }]);
       })
       .then(async guild => {
@@ -72,7 +72,7 @@ class RaidTrain extends Party {
       });
   }
 
-  async setTrainName(trainName) {
+  async setName(trainName) {
     this.trainName = trainName;
 
     await this.persist();
@@ -283,7 +283,6 @@ class RaidTrain extends Party {
     this.endTime = endTime;
 
     await this.persist();
-    return {party: this};
   }
 
   async setLocation(gymId, newRegionChannel = undefined) {
@@ -364,7 +363,7 @@ class RaidTrain extends Party {
       },
 
       reportingMember = (await this.getMember(this.createdById)).member,
-      raidReporter = `Originally reported by ${reportingMember.displayName}`,
+      raidReporter = text.train.footer.replace("${member}", reportingMember.displayName),
 
       meetingTime = !!this.startTime ?
         moment(this.startTime) :
@@ -376,7 +375,11 @@ class RaidTrain extends Party {
         '__Train Times__' :
         '',
       currentGym = this.currentGym || 0,
-      route = this.route ? this.route : [],
+      route = this.route ?
+        this.route[0] !== '' ?
+          this.route :
+          [] :
+        [],
       pokemon = !!this.pokemon ? this.pokemon.name.charAt(0).toUpperCase() + this.pokemon.name.slice(1) : '',
       pokemonUrl = !!this.pokemon && !!this.pokemon.url ?
         this.pokemon.url :
@@ -388,7 +391,7 @@ class RaidTrain extends Party {
           .join('')}` :
         '',
       shiny = !!this.pokemon && this.pokemon.shiny ?
-        Helper.getEmoji(settings.emoji.shiny) || '✨' :
+        Helper.getEmoji(settings.emoji.shiny).toString() || '✨' :
         '',
       attendeeEntries = Object.entries(this.attendees),
       totalAttendeeCount = attendeeEntries.length,
@@ -487,12 +490,7 @@ class RaidTrain extends Party {
     }
 
     if (!!this.endTime && !isNaN(this.endTime)) {
-      if (timeFrame) {
-        timeFrame += ' - ';
-      }
-
-      timeFrame += finishTime.calendar(null, calendarFormat);
-
+      timeFrame += ' - ' + finishTime.calendar(null, calendarFormat);
     }
 
     if (timeFrame) {
@@ -525,13 +523,13 @@ class RaidTrain extends Party {
             .filter(attendeeEntry => attendeeEntry[1].group === group.id);
 
         if (groupInterestedAttendees.length > 0) {
-          embed.addField('Interested', Party.buildAttendeesList(groupInterestedAttendees, 'pokeball', totalAttendeeCount), true);
+          embed.addField('Interested', Party.buildAttendeesList(groupInterestedAttendees, totalAttendeeCount), true);
         }
         if (groupComingAttendees.length > 0) {
-          embed.addField('Coming', Party.buildAttendeesList(groupComingAttendees, 'greatball', totalAttendeeCount), true);
+          embed.addField('Coming', Party.buildAttendeesList(groupComingAttendees, totalAttendeeCount), true);
         }
         if (groupPresentAttendees.length > 0) {
-          embed.addField('Present', Party.buildAttendeesList(groupPresentAttendees, 'ultraball', totalAttendeeCount), true);
+          embed.addField('Present', Party.buildAttendeesList(groupPresentAttendees, totalAttendeeCount), true);
         }
       });
 
@@ -655,7 +653,7 @@ class RaidTrain extends Party {
     embed.setColor('GREEN');
     let description = '';
 
-    if (this.route && this.route.length) {
+    if (this.route && this.route.length && this.route[0] !== '') {
       for (let index = 0; index < this.route.length; ++index) {
         let complete = index < current ? '~~' : '',
           completeText = index < current ? ' (Completed)' : '',
@@ -791,7 +789,7 @@ class RaidTrain extends Party {
 
   async saveRoute(name, message) {
     const userId = await User.getUserId(message),
-          regionId = await Region.getRegionId(this.sourceChannelId);
+      regionId = await Region.getRegionId(this.sourceChannelId);
 
     return DB.knex('SavedRoutes')
       .insert({

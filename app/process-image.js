@@ -14,9 +14,9 @@ const log = require('loglevel').getLogger('ImageProcessor'),
   RegionHelper = require('./region'),
   settings = require('../data/settings'),
   Status = require('./status'),
-  {TesseractWorker, OEM, PSM} = require('tesseract.js'),
+  {createWorker, OEM, PSM} = require('tesseract.js'),
   {PartyStatus, TimeParameter} = require('./constants'),
-  uuidv1 = require('uuid/v1'),
+  {v1: uuidv1} = require('uuid'),
   Utility = require('./utility');
 
 // Will save all images regardless of how right or wrong, in order to better examine output
@@ -56,14 +56,7 @@ class ImageProcessing {
         .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
         .join('\n'));
 
-    this.initializePhoneTimeTesseract();
-    this.initializeTimeRemainingTesseract();
-    this.initializeTierTesseract();
-    this.initializeGymTesseract();
-    this.initializePokemonTesseract();
-
     this.baseTesseractOptions = {
-      'tessedit_ocr_engine_mode': OEM.LSTM_ONLY,
       'load_system_dawg': '0',
       'load_bigram_dawg': '0',
       'load_fixed_length_dawgs': '0',
@@ -71,11 +64,12 @@ class ImageProcessing {
       'load_unambig_dawg': '0',
       'load_punc_dawg': '0',
       'paragraph_text_based': '0',
-      'language_model_penalty_non_dict_word': '1.0',
+      'language_model_penalty_non_dict_word': '1',
+      'language_model_penalty_non_freq_dict_word': '1',
       'classify_misfit_junk_penalty': '0.8',
       'language_model_penalty_font': '0.8',
       'language_model_penalty_script': '0.8',
-      'segment_penalty_dict_nonword': '1.0'
+      'segment_penalty_dict_nonword': '1'
     };
 
     this.gymTesseractOptions = Object.assign({}, this.baseTesseractOptions, {
@@ -89,11 +83,17 @@ class ImageProcessing {
     });
 
     this.phoneTimeTesseractOptions = Object.assign({}, this.baseTesseractOptions, {
-      'numeric_punctuation': ':'
+      'tessedit_char_whitelist': '0123456789:',
+      'tessedit_pageseg_mode': 13, //PSM.SPARSE_TEXT,
+      'numeric_punctuation': ':',
+      'user_patterns_file': 'phone-patterns.txt'
     });
 
     this.timeRemainingTesseractOptions = Object.assign({}, this.baseTesseractOptions, {
-      'numeric_punctuation': ':'
+      'tessedit_char_whitelist': '0123456789:',
+      'tessedit_pageseg_mode': 13, //PSM.SPARSE_TEXT,
+      'numeric_punctuation': ':',
+      'user_patterns_file': 'time-remaining-patterns.txt'
     });
 
     this.tierTesseractOptions = Object.assign({}, this.baseTesseractOptions, {
@@ -102,85 +102,132 @@ class ImageProcessing {
       'classify_misfit_junk_penalty': '0',
       'tessedit_char_whitelist': '@®©'
     });
+
+    this.initializePhoneTimeTesseract();
+    this.initializeTimeRemainingTesseract();
+    this.initializeTierTesseract();
+    this.initializeGymTesseract();
+    this.initializePokemonTesseract();
   }
 
-  initializeGymTesseract() {
+  async createTesseractWorker(version, languages, parameters) {
+    const worker = createWorker({
+      langPath: path.join(__dirname, '..', 'lang-data', 'v' + version),
+      cachePath: path.join(__dirname, '..', 'lang-data', 'v' + version),
+      cacheMethod: 'readOnly',
+      errorHandler: err => log.error(err)
+    });
+
+    await worker.load();
+    await worker.loadLanguage(languages);
+    await worker.initialize(languages);
+    await worker.setParameters(parameters);
+
+    return worker;
+  }
+
+  async initializeGymTesseract() {
     if (!!this.gymTesseract) {
       log.warn('Reinitializing gym name tesseract worker...');
-      this.gymTesseract.terminate();
+      await this.gymTesseract.terminate();
     }
 
-    this.gymTesseract = new TesseractWorker({
-      langPath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cachePath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cacheMethod: 'readOnly'
-    });
+    this.gymTesseract = await this.createTesseractWorker(4, 'eng+grc', this.gymTesseractOptions);
   }
 
-  initializePhoneTimeTesseract() {
+  async initializePhoneTimeTesseract() {
     if (!!this.phoneTesseract) {
       log.warn('Reinitializing phone time tesseract worker...');
-      this.phoneTesseract.terminate();
+      await this.phoneTesseract.terminate();
     }
 
-    this.phoneTesseract = new TesseractWorker({
-      langPath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cachePath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cacheMethod: 'readOnly'
-    });
+    this.phoneTesseract = await this.createTesseractWorker(4, 'eng', this.phoneTimeTesseractOptions);
   }
 
-  initializeTimeRemainingTesseract() {
+  async initializeTimeRemainingTesseract() {
     if (!!this.timeRemainingTesseract) {
       log.warn('Reinitializing time remaining tesseract worker...');
-      this.timeRemainingTesseract.terminate();
+      await this.timeRemainingTesseract.terminate();
     }
 
-    this.timeRemainingTesseract = new TesseractWorker({
-      langPath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cachePath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cacheMethod: 'readOnly'
-    });
+    this.timeRemainingTesseract = await this.createTesseractWorker(4, 'eng', this.timeRemainingTesseractOptions);
   }
 
-  initializeTierTesseract() {
+  async initializeTierTesseract() {
     if (!!this.tierTesseract) {
       log.warn('Reinitializing tier tesseract worker...');
-      this.tierTesseract.terminate();
+      await this.tierTesseract.terminate();
     }
 
-    this.tierTesseract = new TesseractWorker({
-      langPath: path.join(__dirname, '..', 'lang-data', 'v3'),
-      cachePath: path.join(__dirname, '..', 'lang-data', 'v3'),
-      cacheMethod: 'readOnly'
-    });
+    this.tierTesseract = await this.createTesseractWorker(3, 'eng', this.tierTesseractOptions);
   }
 
-  initializePokemonTesseract() {
+  async initializePokemonTesseract() {
     if (!!this.pokemonTesseract) {
       log.warn('Reinitializing pokemon tesseract worker...');
-      this.pokemonTesseract.terminate();
+      await this.pokemonTesseract.terminate();
     }
 
-    this.pokemonTesseract = new TesseractWorker({
-      langPath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cachePath: path.join(__dirname, '..', 'lang-data', 'v4'),
-      cacheMethod: 'readOnly'
-    });
+    this.pokemonTesseract = await this.createTesseractWorker(4, 'eng', this.pokemonTesseractOptions);
   }
 
   initialize() {
     Helper.client.on('message', async message => {
-      const imageUrl = (message.attachments.size) ?
-        message.attachments.first().url :
-        '';
+      const RaidCommand = Helper.client.registry.commands.get('raid');
 
-      // attempt to process first attachment/image if it exists (maybe some day will go through all the attachments...)
-      if (imageUrl && imageUrl.search(/jpg|jpeg|png/)) {
-        log.info('Image Processing Start: ', message.author.id, message.channel.name, imageUrl);
-        message.temporaryProcessingTimestamp = Date.now();
-        this.process(message, imageUrl)
-          .catch(err => log.error(err));
+      if (RaidCommand.isEnabledIn(message.guild) && message.author.id !== message.client.user.id && message.attachments.size > 0) {
+        const regionId = await RegionHelper.getRegionId(message.channel.id)
+          .catch(error => {
+            return null;
+          });
+
+        if (!regionId) {
+          log.info('Image(s) not in a region channel, won\'t be processed');
+          return;
+        }
+
+        const imageUrls = message.attachments
+          .map(attachment => attachment.url)
+          .filter(url => url.search(/jpg|jpeg|png/));
+
+        if (imageUrls.length > 0) {
+          message.react('🤔')
+            .catch(err => log.error(err));
+
+          let raidCreated = false;
+
+          const processingChain = Promise.resolve();
+          let currentPromise = processingChain;
+
+          imageUrls
+            .forEach(imageUrl => {
+              currentPromise = currentPromise
+                .then(lastResult => {
+                  if (lastResult === true) {
+                    raidCreated = true;
+                  }
+
+                  return this.process(message, imageUrl);
+                });
+            });
+
+          currentPromise = currentPromise
+            .then(lastResult => {
+              if (lastResult === true) {
+                raidCreated = true;
+              }
+
+              if (raidCreated === true) {
+                message.delete()
+                  .catch(err => log.error(err));
+              } else {
+                this.removeReaction(message);
+              }
+            });
+
+          processingChain
+            .catch(err => log.error(err));
+        }
       }
     });
 
@@ -210,71 +257,30 @@ class ImageProcessing {
       255);
   }
 
-  async process(message, url) {
-    let newImage, id;
+  process(message, imageUrl) {
+    return new Promise(async resolve => {
+      log.info('Image Processing Start: ', message.author.id, message.channel.name, imageUrl);
+      message.temporaryProcessingTimestamp = Date.now();
 
-    // if raid command is disabled, cancel out immediately
-    const RaidCommand = Helper.client.registry.commands.get('raid');
-    if (!RaidCommand.isEnabledIn(message.guild)) {
-      return;
-    }
+      let newImage, id;
 
-    // if not in a proper raid channel, cancel out immediately
-    const regionId = await RegionHelper.getRegionId(message.channel.id)
-      .catch(error => log.error(error));
-
-    if (!regionId) {
-      log.info('Not in a region channel, won\'t attempt to process');
-      return;
-    }
-
-    // show users the bot is starting to process their image
-    message.react('🤔')
-      .catch(err => log.error(err));
-
-    Jimp.read(url)
-      .then(image => {
-        if (!image) {
-          return;
-        }
-        id = uuidv1();
-
-        // resize to some standard size to help tesseract
-        log.debug("Scaling image to standard size...");
-        newImage = image.scaleToFit(1440, 2560, Jimp.RESIZE_HERMITE);
-        log.debug("...done");
-
-        // determine if image is a raid image or not
-        let screenshotType = ImageProcessing.SCREENSHOT_TYPE_NONE;
-
-        // check for pink "time remaining" pixels
-        newImage.scan(newImage.bitmap.width / 2, (newImage.bitmap.height / 4.34) - 80, 1, 160, function (x, y, idx) {
-          if (screenshotType !== ImageProcessing.SCREENSHOT_TYPE_NONE) {
+      return Jimp.read(imageUrl)
+        .then(image => {
+          if (!image) {
             return;
           }
+          id = uuidv1();
 
-          let red = this.bitmap.data[idx],
-            green = this.bitmap.data[idx + 1],
-            blue = this.bitmap.data[idx + 2];
+          // resize to some standard size to help tesseract
+          log.debug("Scaling image to standard size...");
+          newImage = image.scaleToFit(1440, 2560, Jimp.RESIZE_HERMITE);
+          log.debug("...done");
 
-          // pink = { r: 250, g: 135, b: 149 }
-          if (red <= 255 && red >= 227 && green <= 148 && green >= 122 && blue <= 162 && blue >= 136) {
-            screenshotType = ImageProcessing.SCREENSHOT_TYPE_EGG;
-            return;
-          }
+          // determine if image is a raid image or not
+          let screenshotType = ImageProcessing.SCREENSHOT_TYPE_NONE;
 
-          red = ImageProcessing.convertToFullRange(red);
-          green = ImageProcessing.convertToFullRange(green);
-          blue = ImageProcessing.convertToFullRange(blue);
-
-          if (red <= 255 && red >= 227 && green <= 148 && green >= 122 && blue <= 162 && blue >= 136) {
-            screenshotType = ImageProcessing.SCREENSHOT_TYPE_EGG;
-          }
-        });
-
-        if (screenshotType === ImageProcessing.SCREENSHOT_TYPE_NONE) {
-          // check for orange "time remaining" pixels
-          newImage.scan(newImage.bitmap.width / 1.19, (newImage.bitmap.height / 1.72) - 80, 1, 160, function (x, y, idx) {
+          // check for pink "time remaining" pixels
+          newImage.scan(newImage.bitmap.width / 2, (newImage.bitmap.height / 4.34) - 80, 1, 160, function (x, y, idx) {
             if (screenshotType !== ImageProcessing.SCREENSHOT_TYPE_NONE) {
               return;
             }
@@ -283,9 +289,9 @@ class ImageProcessing {
               green = this.bitmap.data[idx + 1],
               blue = this.bitmap.data[idx + 2];
 
-            // orange = { r: 255, g: 120, b: 55 }
-            if (red <= 255 && red >= 232 && green <= 133 && green >= 107 && blue <= 68 && blue >= 42) {
-              screenshotType = ImageProcessing.SCREENSHOT_TYPE_ONGOING;
+            // pink = { r: 250, g: 135, b: 149 }
+            if (red <= 255 && red >= 227 && green <= 148 && green >= 122 && blue <= 162 && blue >= 136) {
+              screenshotType = ImageProcessing.SCREENSHOT_TYPE_EGG;
               return;
             }
 
@@ -293,49 +299,69 @@ class ImageProcessing {
             green = ImageProcessing.convertToFullRange(green);
             blue = ImageProcessing.convertToFullRange(blue);
 
-            if (red <= 255 && red >= 232 && green <= 133 && green >= 107 && blue <= 68 && blue >= 42) {
-              screenshotType = ImageProcessing.SCREENSHOT_TYPE_ONGOING;
+            if (red <= 255 && red >= 227 && green <= 148 && green >= 122 && blue <= 162 && blue >= 136) {
+              screenshotType = ImageProcessing.SCREENSHOT_TYPE_EGG;
             }
           });
-        }
 
-        if (screenshotType === ImageProcessing.SCREENSHOT_TYPE_NONE) {
-          return null;
-        }
+          if (screenshotType === ImageProcessing.SCREENSHOT_TYPE_NONE) {
+            // check for orange "time remaining" pixels
+            newImage.scan(newImage.bitmap.width / 1.19, (newImage.bitmap.height / 1.72) - 80, 1, 160, function (x, y, idx) {
+              if (screenshotType !== ImageProcessing.SCREENSHOT_TYPE_NONE) {
+                return;
+              }
 
-        return this.getRaidData(id, message, newImage, screenshotType);
-      })
-      .then(async data => {
-        // write original image as a reference
-        if (debugFlag ||
-          ((data === false || (data && (!data.phoneTime || !data.gym || !data.timeRemaining || data.pokemon.placeholder))) && log.getLevel() === log.levels.DEBUG)) {
-          const sanitizedData = Object.assign({}, data);
-          if (sanitizedData.channel) {
-            sanitizedData.channel = sanitizedData.channel.id;
+              let red = this.bitmap.data[idx],
+                green = this.bitmap.data[idx + 1],
+                blue = this.bitmap.data[idx + 2];
+
+              // orange = { r: 255, g: 120, b: 55 }
+              if (red <= 255 && red >= 232 && green <= 133 && green >= 107 && blue <= 68 && blue >= 42) {
+                screenshotType = ImageProcessing.SCREENSHOT_TYPE_ONGOING;
+                return;
+              }
+
+              red = ImageProcessing.convertToFullRange(red);
+              green = ImageProcessing.convertToFullRange(green);
+              blue = ImageProcessing.convertToFullRange(blue);
+
+              if (red <= 255 && red >= 232 && green <= 133 && green >= 107 && blue <= 68 && blue >= 42) {
+                screenshotType = ImageProcessing.SCREENSHOT_TYPE_ONGOING;
+              }
+            });
           }
-          if (sanitizedData.pokemon && sanitizedData.pokemon.name) {
-            sanitizedData.pokemon = sanitizedData.pokemon.name;
-          }
-          log.debug(sanitizedData);
-          newImage.write(path.join(__dirname, this.imagePath, `${id}.png`));
-        }
 
-        if (data) {
-          return this.createRaid(message, data)
-            .then(result => message.delete())
-            .catch(err => log.error(err));
-        } else {
-          // this means no gym was found what-so-ever so either processing was really messed up or it's not a raid screenshot
-          this.removeReaction(message);
-        }
-      })
-      .catch(err => {
-        // something went very wrong
-        log.error(err);
-        this.removeReaction(message);
-        message.react('❌')
-          .catch(err => log.error(err));
-      });
+          if (screenshotType === ImageProcessing.SCREENSHOT_TYPE_NONE) {
+            return null;
+          }
+
+          return this.getRaidData(id, message, newImage, screenshotType);
+        })
+        .then(async data => {
+          // write original image as a reference
+          if (debugFlag ||
+            ((data === false || (data && (!data.phoneTime || !data.gym || !data.timeRemaining || data.pokemon.placeholder))) && log.getLevel() === log.levels.DEBUG)) {
+            const sanitizedData = Object.assign({}, data);
+            if (sanitizedData.channel) {
+              sanitizedData.channel = sanitizedData.channel.id;
+            }
+            if (sanitizedData.pokemon && sanitizedData.pokemon.name) {
+              sanitizedData.pokemon = sanitizedData.pokemon.name;
+            }
+            log.debug(sanitizedData);
+            newImage.write(path.join(__dirname, this.imagePath, `${id}.png`));
+          }
+
+          if (data) {
+            return this.createRaid(message, data, imageUrl)
+              .then(result => resolve(true))
+              .catch(err => log.error(err));
+          } else {
+            // this means no gym was found what-so-ever so either processing was really messed up or it's not a raid screenshot
+            resolve(false);
+          }
+        });
+    });
   }
 
   /**
@@ -476,89 +502,77 @@ class ImageProcessing {
   /**
    * Given a tesseract result, find the highest-confidence subsequences in the result text
    */
-  tesseractGetConfidentSequences(result, useWords = false, minConfidence = 60) {
-    return result.text === '' ?
+  tesseractGetConfidentSequences(result, minConfidence = 60, acceptZeroConfidence = false) {
+    return result.symbols.length === 0 ?
       [] :
-      useWords ?
-        [result.words
-          .map(word => word.choices
-            // choose highest-confidence word
-              .sort((choiceA, choiceB) => choiceB.confidence - choiceA.confidence)[0]
-          )
-          .filter(word => word.confidence > minConfidence)
-          .map(word => word.text)
-          .join(' ')] :
-        result.symbols
+      result.symbols
+        .map(symbol => {
+          // hack - tesseract likes to occasionally return a confidence of 0 with things it actually read very clearly
+          if (symbol.confidence === 0 && symbol.choices.length === 1 && acceptZeroConfidence) {
+            symbol.confidence = minConfidence;
+            symbol.choices[0].confidence = minConfidence;
+          }
+
+          return symbol;
+        })
         // strip out very low-confidence colons (tesseract will see them correctly but with low confidence)
-          .filter(symbol => symbol.text !== ':' || symbol.confidence >= 20)
-          .map(symbol => Object.assign({}, symbol, symbol.choices
-            // choose highest-confidence symbol - not always the default one from tesseract!
-              .sort((choiceA, choiceB) => choiceB.confidence - choiceA.confidence)[0]
-          ))
-          .reduce((previous, current) => {
-            /// separate into chunks using low-confidence symbols as separators
-            let chunk;
+        .filter(symbol => symbol.text !== ':' || symbol.confidence >= 20)
+        .map(symbol => Object.assign({}, symbol, symbol.choices
+          // choose highest-confidence symbol - not always the default one from tesseract!
+          .sort((choiceA, choiceB) => choiceB.confidence - choiceA.confidence)[0]
+        ))
+        .reduce((previous, current) => {
+          /// separate into chunks using low-confidence symbols as separators
+          let chunk;
 
-            if (current.confidence < minConfidence || previous.length === 0 ||
-              current.word.baseline !== previous[previous.length - 1][previous[previous.length - 1].length - 1].word.baseline
-            ) {
-              chunk = [];
-              previous.push(chunk);
-            } else {
-              chunk = previous[previous.length - 1];
-            }
+          if (current.confidence < minConfidence || previous.length === 0 ||
+            current.word.baseline !== previous[previous.length - 1][previous[previous.length - 1].length - 1].word.baseline) {
+            chunk = [];
+            previous.push(chunk);
+          } else {
+            chunk = previous[previous.length - 1];
+          }
 
-            chunk.push(current);
+          chunk.push(current);
 
-            return previous;
-          }, [])
-          // strip out symbols below min threshold
-          .map(array => array.filter(symbol => symbol.confidence >= minConfidence))
-          // sort to put highest-confidence tokens first
-          .sort((arrA, arrB) => ((arrB
-              .map(symbol => symbol.confidence)
-              .reduce((total, current) => total + current, 0) / arrB.length) || 0) -
-            ((arrA
-              .map(symbol => symbol.confidence)
-              .reduce((total, current) => total + current, 0) / arrA.length) || 0))
-          .map(symbols => symbols.map(symbol => symbol.text)
-            .join(''));
+          return previous;
+        }, [])
+        // strip out symbols below min threshold
+        .map(array => array.filter(symbol => symbol.confidence >= minConfidence))
+        // sort to put highest-confidence tokens first
+        .sort((arrA, arrB) => ((arrB
+            .map(symbol => symbol.confidence)
+            .reduce((total, current) => total + current, 0) / arrB.length) || 0) -
+          ((arrA
+            .map(symbol => symbol.confidence)
+            .reduce((total, current) => total + current, 0) / arrA.length) || 0))
+        .map(symbols => symbols.map(symbol => symbol.text)
+          .join(''));
   }
 
   /**
    * Basically try to augment tesseract text confidence in by replacing low confidence with spaces and searching for colons
    **/
   tesseractProcessTime(result) {
-    const confidentText = this.tesseractGetConfidentSequences(result, false, 70);
+    const confidentText = new Set([...this.tesseractGetConfidentSequences(result, 80),
+        ...this.tesseractGetConfidentSequences(result, 80, true)]),
+      iterator = confidentText.values();
 
-    let match = '';
+    let next = iterator.next();
 
-    confidentText.forEach(text => {
-      if (match !== '') {
-        return;
-      }
-
-      // if still no colon, replace common matches with colon in an attempt to get a match
-      if (text.search(':') < 0) {
-        text = text.replace(/!/g, ':');
-      }
-
-      // HACK: On a decent number of screenshots, a colon in the phone time is seen as a 1 or 2,
-      // so try making a version of the time that replaces it to cover this possibility
-      if (text.match(/([0-2]?\d)([12])([0-5]\d)(\s?[ap]m)?/i)) {
-        text = text.replace(/([0-2]?\d)([12])([0-5]\d)(\s?[ap]m)?/i, '$1:$3') + ' ' + text;
-      }
-
-      let textMatch = text
+    while (!next.done) {
+      const match = next.value
         .replace(/[^\w\s:!]/g, ' ')
-        .match(/([0-2]?\d:?([0-5]\d)(\s?[ap]m)?)/i);
+        .match(/([0-2]?\d:?([0-5]\d))/i);
 
-      if (textMatch) {
-        match = textMatch;
+      if (match) {
+        return match;
       }
-    });
 
-    return match;
+      next = iterator.next();
+    }
+
+    return '';
   }
 
   async getPhoneTime(id, message, image, region) {
@@ -580,22 +594,17 @@ class ImageProcessing {
         phoneTime = phoneTime.charAt(0) + ':' + phoneTime.substring(1);
       }
 
-      // Determine AM or PM time
-      if (phoneTime.search(/([ap])m/gi) >= 0) {
-        phoneTime = moment(phoneTime, ['hmm a', 'h:m a']);
-      } else {
-        // figure out if time should be AM or PM
-        const now = moment(),
-          timeAM = moment(phoneTime + ' am', ['hmm a', 'Hmm', 'h:m a', 'H:m']),
-          timePM = moment(phoneTime + ' pm', ['hmm a', 'Hmm', 'h:m a', 'H:m']),
-          times = [timeAM.diff(now), timePM.diff(now)];
+      // figure out if time should be AM or PM
+      const now = moment(),
+        timeAM = moment(phoneTime + ' am', ['hmm a', 'Hmm', 'h:m a', 'H:m']),
+        timePM = moment(phoneTime + ' pm', ['hmm a', 'Hmm', 'h:m a', 'H:m']),
+        times = [timeAM.diff(now), timePM.diff(now)];
 
-        // whatever time is closer to current time (less diff), use that
-        if (Math.abs(times[0]) < Math.abs(times[1])) {
-          phoneTime = timeAM;
-        } else {
-          phoneTime = timePM;
-        }
+      // whatever time is closer to current time (less diff), use that
+      if (Math.abs(times[0]) < Math.abs(times[1])) {
+        phoneTime = timeAM;
+      } else {
+        phoneTime = timePM;
       }
     }
 
@@ -627,7 +636,7 @@ class ImageProcessing {
           .crop(croppedRegion.x, croppedRegion.y, croppedRegion.width, croppedRegion.height)
           .grayscale()
           .scan(0, 0, croppedRegion.width, croppedRegion.height, this.hideMidLevelContent)
-          .scale(2, Jimp.RESIZE_HERMITE)
+          .scale(2, Jimp.RESIZE_BEZIER)
           // yes, blur slightly then sharpen to clean up edges around phone time
           .blur(1)
           .convolute([[0, -1, 0], [-1, 5, -1], [0, -1, 0]]);
@@ -638,44 +647,45 @@ class ImageProcessing {
           }
 
           return ImageProcessing.lock.acquire('phoneTime', () => {
-            this.phoneTesseract.recognize(image, 'eng', this.phoneTimeTesseractOptions)
+            this.phoneTesseract.recognize(image)
               .catch(err => reject(err))
               .then(result => {
-                const match = this.tesseractProcessTime(result);
-                if (match && match.length) {
-                  resolve({
-                    image: newImage,
-                    text: match[1],
-                    result
-                  });
-                } else {
-                  // try again with image inverted
-                  newImage
-                    .invert()
-                    .getBuffer(Jimp.MIME_PNG, (err, image) => {
-                      if (err) {
-                        reject(err);
-                      }
+                // Put very low-confidence separator in so normal and inverted results definitely remain separated from each other
+                result.data.symbols.push({
+                  text: ' ',
+                  confidence: '0.01',
+                  choices: [{text: ' ', confidence: '0.01'}],
+                  word: {baseline: {}}
+                });
 
-                      this.phoneTesseract.recognize(image, 'eng', this.phoneTimeTesseractOptions)
-                        .catch(err => reject(err))
-                        .then(result => {
-                          const match = this.tesseractProcessTime(result);
-                          if (match && match.length) {
-                            resolve({
-                              image: newImage,
-                              text: match[1],
-                              result
-                            });
-                          } else {
-                            resolve({
-                              image: newImage,
-                              result
-                            });
-                          }
-                        });
-                    });
-                }
+                // try again with image inverted
+                newImage
+                  .invert()
+                  .getBuffer(Jimp.MIME_PNG, (err, image) => {
+                    if (err) {
+                      reject(err);
+                    }
+
+                    this.phoneTesseract.recognize(image)
+                      .catch(err => reject(err))
+                      .then(invertedResult => {
+                        result.data.symbols.push(...invertedResult.data.symbols);
+
+                        const match = this.tesseractProcessTime(result.data);
+                        if (match && match.length) {
+                          resolve({
+                            image: newImage,
+                            text: match[1],
+                            result: result
+                          });
+                        } else {
+                          resolve({
+                            image: newImage,
+                            result: result
+                          });
+                        }
+                      });
+                  });
               });
           });
         });
@@ -708,7 +718,7 @@ class ImageProcessing {
 
     // NOTE:  There is a chance timeRemaining could not be determined... not sure if we would want to do
     //        a different time of image processing at that point or not...
-    return values.text;
+    return {timeRemaining: values.text};
   }
 
   getOCRRaidTimeRemaining(id, message, image, region, screenshotType) {
@@ -733,7 +743,7 @@ class ImageProcessing {
         .crop(region.x, region.y, region.width, region.height)
         .scan(0, 0, region.width, region.height, this.hideSaturatedContent(5))
         .scan(0, 0, region.width, region.height, this.filterPureWhiteContent)
-        .scale(2, Jimp.RESIZE_HERMITE)
+        .scale(2, Jimp.RESIZE_BEZIER)
         // yes, blur slightly then sharpen to clean up edges around time remaining
         .blur(1)
         .convolute([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
@@ -744,10 +754,10 @@ class ImageProcessing {
           }
 
           return ImageProcessing.lock.acquire('timeRemaining', () => {
-            this.timeRemainingTesseract.recognize(image, 'eng', this.timeRemainingTesseractOptions)
+            this.timeRemainingTesseract.recognize(image)
               .catch(err => reject(err))
               .then(result => {
-                const confidentText = this.tesseractGetConfidentSequences(result, false, 70);
+                const confidentText = this.tesseractGetConfidentSequences(result.data, 80);
 
                 const match = confidentText
                   .map(text => text.match(/(\d{1,2}:\d{2}:\d{2})/))
@@ -757,12 +767,12 @@ class ImageProcessing {
                   resolve({
                     image: newImage,
                     text: match[1],
-                    result
+                    result: result.data
                   });
                 } else {
                   resolve({
                     image: newImage,
-                    result
+                    result: result.data
                   });
                 }
               });
@@ -849,15 +859,15 @@ class ImageProcessing {
             }
 
             return ImageProcessing.lock.acquire('gym', () => {
-              this.gymTesseract.recognize(image, 'eng', this.gymTesseractOptions)
+              this.gymTesseract.recognize(image)
                 .catch(err => reject(err))
                 .then(result => {
-                  const confidentWords = this.tesseractGetConfidentSequences(result, true),
-                    text = confidentWords.length > 0 ?
-                      confidentWords[0]
-                        .replace(/[^\w\s-]/g, '')
-                        .replace(/\n/g, ' ').trim() :
-                      '';
+                  const confidentWords = this.tesseractGetConfidentSequences(result.data, 80),
+                    text = confidentWords
+                      .map(word => word.replace(/[^\wα-ωΑ-Ω\s-\/]/g, '')
+                        .replace(/\n/g, ' ').trim())
+                      .filter(word => word.length > 0)
+                      .join(' ');
 
                   resolve({
                     image: blurredImage,
@@ -957,10 +967,10 @@ class ImageProcessing {
             }
 
             return ImageProcessing.lock.acquire('pokemon', () => {
-              this.pokemonTesseract.recognize(image, 'eng', this.pokemonTesseractOptions)
+              this.pokemonTesseract.recognize(image)
                 .catch(err => reject(err))
                 .then(result => {
-                  const text = result.text.replace(/[^\w\n]/gi, '');
+                  const text = result.data.text.replace(/[^\w\n]/gi, '');
                   let matchCP = text.match(/\d{3,10}/g),
                     matchPokemon = text.replace(/(cp)?\s?\d+/g, ' ').match(/\w+/g),
                     pokemon = '',
@@ -980,7 +990,7 @@ class ImageProcessing {
                     image: processedImage,
                     cp,
                     pokemon,
-                    result
+                    result: result.data
                   });
                 });
             });
@@ -1062,20 +1072,20 @@ class ImageProcessing {
           }
 
           return ImageProcessing.lock.acquire('tier', () => {
-            this.tierTesseract.recognize(image, 'eng', this.tierTesseractOptions)
+            this.tierTesseract.recognize(image)
               .catch(err => reject(err))
               .then(result => {
                 let tier = 0;
 
                 // tier symbols will all be on the same line, so pick the text/line of whatever line has the most matches (assuming other lines are stray artifacts and/or clouds)
-                for (let i = 0; i < result.lines.length; i++) {
+                for (let i = 0; i < result.data.lines.length; i++) {
                   // replace characters that are almost always jibberish characters
-                  const text = result.lines[i].text
+                  const text = result.data.lines[i].text
                     .replace(/\s/g, '')
                     .replace(/“”‘’"'-_=\\\/\+/g, '');
 
                   // match highly probable / common character regex
-                  const match = text.match(/[@Q9Wé®©]+/g);
+                  const match = text.match(/[@®©]+/g);
 
                   if (match && match.length && match[0].length > tier) {
                     tier = match[0].length;
@@ -1085,7 +1095,7 @@ class ImageProcessing {
                 resolve({
                   image: newImage,
                   tier,
-                  result
+                  result: result.data
                 });
               });
           });
@@ -1100,7 +1110,7 @@ class ImageProcessing {
       gymNameCrop = {
         x: image.bitmap.width / 4.5,
         y: image.bitmap.height / 18.0,
-        width: image.bitmap.width - (image.bitmap.width / 2.25),
+        width: image.bitmap.width - (image.bitmap.width / 4.5),
         height: image.bitmap.height / 9.0
       },
       phoneTimeCrop = {
@@ -1142,7 +1152,7 @@ class ImageProcessing {
     }
 
     // TIME REMAINING
-    const timeRemaining = await this.getRaidTimeRemaining(id, message, image, allCrop, screenshotType);
+    promises.push(this.getRaidTimeRemaining(id, message, image, allCrop, screenshotType));
 
     // PHONE TIME
     promises.push(this.getPhoneTime(id, message, image, phoneTimeCrop));
@@ -1166,11 +1176,11 @@ class ImageProcessing {
             message.adjacent.channel :
             message.channel,
           gym,
-          timeRemaining: timeRemaining,
-          phoneTime: values[0].phoneTime,
-          tier: values[1].tier || (values[2] && values[2].tier) || 0,
-          cp: values[1].cp || 0,
-          pokemon: values[1].pokemon
+          timeRemaining: values[0].timeRemaining,
+          phoneTime: values[1].phoneTime,
+          tier: values[2].tier || 0,
+          cp: values[2].cp || 0,
+          pokemon: values[2].pokemon
         };
       })
       .catch(err => {
@@ -1180,13 +1190,13 @@ class ImageProcessing {
   }
 
   removeReaction(message) {
-    message.reactions
+    message.reactions.cache
       .filter(reaction => reaction.emoji.name === '🤔' && reaction.me)
       .forEach(reaction => reaction.users.remove(message.client.user.id)
-        .catch(err => log.error(err)))
+        .catch(err => log.error(err)));
   }
 
-  async createRaid(message, data) {
+  async createRaid(message, data, imageUrl) {
     const TimeType = Helper.client.registry.types.get('time'),
       messageTime = moment(message.createdAt),
       raidRegionChannel = data.channel,
@@ -1205,9 +1215,6 @@ class ImageProcessing {
       moment.invalid() :
       data.phoneTime,
       timeWarn = durationWarn;
-
-    // remove all reactions from processed image
-    this.removeReaction(message);
 
     if (raidRegionChannel !== message.channel && !PartyManager.findRaid(gymId, false)) {
       // Found gym is in an adjacent region and raid doesn't exist, ask about creating it there
@@ -1286,7 +1293,10 @@ class ImageProcessing {
             fullStatusMessage = await raid.getFullStatusMessage();
 
           return raidRegionChannel.send(channelMessageHeader, fullStatusMessage)
-            .then(announcementMessage => PartyManager.addMessage(raid.channelId, announcementMessage, true))
+            .then(announcementMessage => {
+              PartyManager.addMessage(raid.channelId, announcementMessage, true)
+                .catch(err => log.error(err));
+            })
             .then(async result => {
               await PartyManager.getChannel(raid.channelId)
                 .then(async channel => {
@@ -1296,7 +1306,7 @@ class ImageProcessing {
                     await channel.channel
                       .send(raid.getIncompleteScreenshotMessage(), {
                         files: [
-                          message.attachments.first().url
+                          imageUrl
                         ]
                       })
                       .then(message => raid.setIncompleteScreenshotMessage(message))
@@ -1312,7 +1322,8 @@ class ImageProcessing {
                 .catch(err => log.error(err));
             })
             .then(channelRaidMessage => {
-              PartyManager.addMessage(raid.channelId, channelRaidMessage, true);
+              PartyManager.addMessage(raid.channelId, channelRaidMessage, true)
+                .catch(err => log.error(err));
             })
             .then(async result => {
               Helper.client.emit('raidCreated', raid, message.member.id);

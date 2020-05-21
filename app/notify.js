@@ -65,7 +65,7 @@ class Notify {
 
     for (const memberId of [...new Set([...trainMembers])]
       .filter(memberId => memberId !== reportingMemberId)
-      .filter(memberId => trainChannel.guild.members.has(memberId))
+      .filter(memberId => trainChannel.guild.members.cache.has(memberId))
       .filter(memberId => trainChannel.permissionsFor(memberId).has('VIEW_CHANNEL'))) {
       messagesToSend.push({
         userId: memberId,
@@ -108,11 +108,11 @@ class Notify {
       regionChannel = (await PartyManager.getChannel(message.channel.id)).channel,
       reportingMember = (await PartyManager.getMember(regionChannel.id, reportingMemberId)).member,
       shiny = pokemon.shiny || (additionalPokemon && additionalPokemon.shiny) ?
-        Helper.getEmoji(settings.emoji.shiny) || '✨' :
+        Helper.getEmoji(settings.emoji.shiny).toString() || '✨' :
         '',
-      header = `A ${pokemonName}${shiny} spawn has been reported in #${regionChannel.name} by ${reportingMember.displayName}:`,
-      regionHeader = `A ${pokemonName}${shiny} spawn has been reported by ${reportingMember.displayName}:`,
-      botLabChannel = message.guild.channels.find(channel => channel.name === settings.channels["bot-lab"]),
+      header = `A wild ${pokemonName}${shiny} has been reported in #${regionChannel.name} by ${reportingMember.displayName}:`,
+      regionHeader = `A wild ${pokemonName}${shiny} has been reported by ${reportingMember.displayName}:`,
+      botLabChannel = message.guild.channels.cache.find(channel => channel.name === settings.channels["bot-lab"]),
       embed = new MessageEmbed();
     embed.setColor('GREEN');
     embed.setDescription(location + '\n\n**Warning: Spawns are user-reported. There is no way to know exactly how long a Pokémon will be there. Most spawns are 30 min. Use your discretion when chasing them.**');
@@ -137,7 +137,7 @@ class Notify {
 
     for (const memberId of [...new Set(pokemonMembers)]
       .filter(memberId => memberId !== reportingMemberId)
-      .filter(memberId => areaChannel.guild.members.has(memberId))
+      .filter(memberId => areaChannel.guild.members.cache.has(memberId))
       .filter(memberId => areaChannel.permissionsFor(memberId).has('VIEW_CHANNEL'))) {
       messagesToSend.push({
         userId: memberId,
@@ -206,7 +206,7 @@ class Notify {
 
     for (const memberId of [...new Set([...pokemonMembers, ...gymMembers, ...attendees])]
       .filter(memberId => memberId !== reportingMemberId)
-      .filter(memberId => raidChannel.guild.members.has(memberId))
+      .filter(memberId => raidChannel.guild.members.cache.has(memberId))
       .filter(memberId => raidChannel.permissionsFor(memberId).has('VIEW_CHANNEL'))) {
       messagesToSend.push({
         userId: memberId,
@@ -496,18 +496,24 @@ class Notify {
 
   async shout(message, members, text, type, fromMember = null) {
     const party = await PartyManager.getParty(message.channel.id),
+      userMentions = [],
       membersStrings = await Promise.all(members
         .map(async member => {
           const mention = await this.shouldMention(member, type);
 
-          return mention ?
-            member.toString() :
-            `**${member.displayName}**`;
+          if (mention) {
+           userMentions.push(member.user.id);
+          }
+
+          return member.toString();
         }))
-        .catch(err => log.error(err)),
+        .catch(err => {
+          log.error(err);
+          return [];
+        }),
       membersString = membersStrings
         .reduce((prev, next) => prev + ', ' + next),
-      botLabChannel = message.guild.channels.find(channel => channel.name === settings.channels["bot-lab"]),
+      botLabChannel = message.guild.channels.cache.find(channel => channel.name === settings.channels["bot-lab"]),
       embed = new MessageEmbed();
 
     embed.setColor('GREEN');
@@ -517,7 +523,7 @@ class Notify {
     }
     embed.setDescription(text);
 
-    message.channel.send(membersString, embed)
+    message.channel.send(membersString, {embed, allowedMentions: {users: userMentions}})
       .then(shoutMessage => {
         message.channel.send(`To enable or disable these notifications, use the \`${message.client.commandPrefix}mentions\`, \`${message.client.commandPrefix}mentions-groups\`, \`${message.client.commandPrefix}mentions-train-stops\` and \`${message.client.commandPrefix}mentions-shouts\` commands in ${botLabChannel.toString()}.`)
           .then(shoutFooterMessage => {

@@ -13,6 +13,7 @@ const log = require('loglevel').getLogger('Raid'),
   Party = require('./party'),
   Status = require('./status'),
   Privacy = require('./privacy'),
+  text = require('../data/text.json'),
   TimeType = require('../types/time');
 
 let Gym,
@@ -100,7 +101,7 @@ class Raid extends Party {
             // move channel to end
             return newChannel.guild.setChannelPositions([{
               channel: newChannel,
-              position: newChannel.guild.channels.size - 1
+              position: newChannel.guild.channels.cache.size - 1
             }]);
           })
           .then(async guild => {
@@ -741,11 +742,10 @@ class Raid extends Party {
       reportingMember = (this.createdById >= 0) ?
         (await this.getMember(this.createdById)).member :
         {displayName: '????'},
-      raidReporter = `originally reported by ${reportingMember.displayName}`,
 
       endTime = this.endTime !== TimeType.UNDEFINED_END_TIME ?
-        `Raid available until ${moment(this.endTime).calendar(null, calendarFormat)}, ` :
-        'Raid end time currently unset, ',
+        text.raid.time.remaining.replace("${time}", moment(this.endTime).calendar(null, calendarFormat)) :
+        text.raid.time.unset,
       hatchTime = !!this.hatchTime ?
         moment(this.hatchTime) :
         '',
@@ -803,8 +803,8 @@ class Raid extends Party {
     embed.setTitle(`Map Link: ${gymName}`);
     embed.setURL(gymUrl);
 
-    const shiny = this.pokemon.shiny ?
-      Helper.getEmoji(settings.emoji.shiny) || '✨' :
+    const shiny = !!this.pokemon && this.pokemon.shiny ?
+      Helper.getEmoji(settings.emoji.shiny).toString() || '✨' :
       '';
     embed.setDescription(raidDescription + shiny);
 
@@ -846,8 +846,8 @@ class Raid extends Party {
       embed.addField('**Pokémon Information**', pokemonDataContent);
     }
 
-    embed.setFooter(endTime + raidReporter,
-      reportingMember.displayName !== '????' ?
+    embed.setFooter(text.raid.footer.replace("${timeFooter}", endTime).replace("${member}", reportingMember.displayName),
+      (!!reportingMember && reportingMember.displayName !== '????') ?
         reportingMember.user.displayAvatarURL() :
         Helper.client.rest.cdn.DefaultAvatar(0)
     );
@@ -885,18 +885,18 @@ class Raid extends Party {
             .filter(attendeeEntry => attendeeEntry[1].group === group.id);
 
         if (groupInterestedAttendees.length > 0) {
-          embed.addField('Interested', Party.buildAttendeesList(groupInterestedAttendees, 'pokeball', totalAttendeeCount), true);
+          embed.addField('Interested', Party.buildAttendeesList(groupInterestedAttendees, totalAttendeeCount), true);
         }
         if (groupComingAttendees.length > 0) {
-          embed.addField('Coming', Party.buildAttendeesList(groupComingAttendees, 'greatball', totalAttendeeCount), true);
+          embed.addField('Coming', Party.buildAttendeesList(groupComingAttendees, totalAttendeeCount), true);
         }
         if (groupPresentAttendees.length > 0) {
-          embed.addField('Present', Party.buildAttendeesList(groupPresentAttendees, 'ultraball', totalAttendeeCount), true);
+          embed.addField('Present', Party.buildAttendeesList(groupPresentAttendees, totalAttendeeCount), true);
         }
       });
 
     if (completeAttendees.length > 0) {
-      embed.addField('__Complete__', Party.buildAttendeesList(completeAttendees, 'premierball', totalAttendeeCount));
+      embed.addField(' __Complete__', Party.buildAttendeesList(completeAttendees, totalAttendeeCount));
     }
 
     if (!!this.hatchTime && !isNaN(this.hatchTime)) {

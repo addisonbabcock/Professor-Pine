@@ -322,7 +322,7 @@ class RegionHelper {
       }
 
       const channelId = (await this.getChannelsForGym(gym, guildId))[0].channelId,
-        channelName = client.channels.get(channelId).name;
+        channelName = client.channels.cache.get(channelId).name;
 
       if (!channelMap.has(channelName)) {
         channelMap.set(channelName, []);
@@ -473,8 +473,7 @@ class RegionHelper {
       const url = that.googleMapsLinkForRegion(region);
       if (url != null) {
         const embed = new Discord.MessageEmbed()
-          .setTitle("This channel covers the following area")
-          .setURL(url);
+          .setTitle("This channel covers the following area");
 
         if (regionId) {
           let url = that.googleMapsLinkForRegion(region);
@@ -530,7 +529,6 @@ class RegionHelper {
       if (url != null) {
         const embed = new Discord.MessageEmbed()
           .setTitle("This channel covers the following area")
-          .setURL(url)
           .setImage(url);
 
         if (gyms) {
@@ -836,8 +834,8 @@ class RegionHelper {
             overwrites: newCategory.permissionOverwrites
           }, "For a region")
             .then(newChannel => {
-              log.info("created new channel for " + name + " with id " + newChannel.id + " under category with id " + newCategory.id);
-              that.storeRegion(polydata, newChannel.id, newChannel.guild.Id, gymCache)
+              log.info("created new channel for " + name + " with id " + newChannel.id + " under category with id " + newCategory.id + " for guild id " + newChannel.guild.id);
+              that.storeRegion(polydata, newChannel.id, newChannel.guild.id, gymCache)
                 .catch(error => {
                   log.error(error);
                   reject("An error occurred storing the region for " + name);
@@ -849,7 +847,6 @@ class RegionHelper {
         }).catch(error => reject(error));
     })
   }
-
   async addGym(args, gymCache) {
     const that = this;
     return new Promise(async (resolve, reject) => {
@@ -1047,9 +1044,7 @@ class RegionHelper {
 
       if (gym.places) {
         log.info(`places: ${gym.places}`);
-        embed.addBlankField(true);
-        embed.addField("Nearby Places", gym.places);
-        embed.addBlankField(true);
+        embed.addField("Nearby Places", gym.places.substr(0, 1024));
       }
     }
 
@@ -1401,7 +1396,7 @@ class RegionHelper {
         final = that.keywordStringFromArray(uniq(existing.concat(additions)));
       } else {
         if (keywords.toLowerCase() === "all") {
-          final = NULL;
+          final = null;
         } else {
           const removes = that.keywordArrayFromString(keywords);
           removes.forEach(item => {

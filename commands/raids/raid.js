@@ -73,7 +73,10 @@ class RaidCommand extends Commando.Command {
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'raid' &&
         (PartyManager.validParty(message.channel.id) || !Gym.isValidChannel(message.channel.id))) {
-        return ['invalid-channel', message.reply('Create raids from region channels!')];
+        return {
+          reason: 'invalid-channel',
+          response: message.reply('Create raids from region channels!')
+        };
       }
       return false;
     });
@@ -115,7 +118,7 @@ class RaidCommand extends Commando.Command {
     let raid;
 
     Raid.createRaid(sourceChannel.id, message.member.id, pokemon, gymId, isExclusive)
-    // create and send announcement message to region channel
+      // create and send announcement message to region channel
       .then(async info => {
         raid = info.party;
 
@@ -125,7 +128,10 @@ class RaidCommand extends Commando.Command {
             fullStatusMessage = await raid.getFullStatusMessage();
 
           return sourceChannel.send(channelMessageHeader, fullStatusMessage)
-            .then(announcementMessage => PartyManager.addMessage(raid.channelId, announcementMessage))
+            .then(announcementMessage => {
+              PartyManager.addMessage(raid.channelId, announcementMessage)
+                .catch(err => log.error(err));
+            })
             // create and send initial status message to raid channel
             .then(async botMessage => {
               const sourceChannelMessageHeader = await raid.getSourceChannelMessageHeader(),
@@ -138,7 +144,10 @@ class RaidCommand extends Commando.Command {
                 })
                 .catch(err => log.error(err));
             })
-            .then(channelRaidMessage => PartyManager.addMessage(raid.channelId, channelRaidMessage, true))
+            .then(channelRaidMessage => {
+              PartyManager.addMessage(raid.channelId, channelRaidMessage, true)
+                .catch(err => log.error(err));
+            })
             // now ask user about remaining time on this brand-new raid
             .then(result => {
               // somewhat hacky way of letting time type know of some additional information
@@ -213,7 +222,7 @@ class RaidCommand extends Commando.Command {
                   statusString = 'present';
                   break;
               }
-              replyMessage +=  ` You have been marked as ${statusString} in its channel.`;
+              replyMessage += ` You have been marked as ${statusString} in its channel.`;
             }
 
             message.reply(replyMessage)

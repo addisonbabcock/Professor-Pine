@@ -78,7 +78,7 @@ module.exports = class EditGym extends commando.Command {
 
     this.keywordsCollector = new commando.ArgumentCollector(client, [{
       key: 'keywords',
-      prompt: 'Type `add` or `remove` followed by a list of keywords separated by commas. To remove all existing commas type `remove all`.',
+      prompt: 'Type `add` or `remove` followed by a list of keywords separated by commas. To remove all existing keywords type `remove all`.',
       type: 'keywords'
     }], 3);
 
@@ -117,11 +117,17 @@ module.exports = class EditGym extends commando.Command {
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'edit-gym') {
         if (!Helper.isBotManagement(message)) {
-          return ['unauthorized', message.reply('You are not authorized to use this command.')];
+          return {
+            reason: 'unauthorized',
+            response: message.reply('You are not authorized to use this command.')
+          };
         }
 
         if (!Helper.isBotChannel(message) && !Helper.isChannelBounded(message.channel.id, PartyManager.getRaidChannelCache())) {
-          return ['invalid-channel', message.reply('Edit gyms from regional channels or a bot channel.')];
+          return {
+            reason: 'invalid-channel',
+            response: message.reply('Edit gyms from regional channels or a bot channel.')
+          };
         }
       }
 

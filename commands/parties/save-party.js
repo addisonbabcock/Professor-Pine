@@ -22,11 +22,17 @@ class SavePartyCommand extends Commando.Command {
 
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'save-party') {
-        if (!PartyManager.validParty(message.channel.id, [PartyType.RAID_TRAIN, PartyType.RAID])) {
-          return ['invalid-channel', message.reply('You can only save a raid or train channel from deletion!')];
+        if (!PartyManager.validParty(message.channel.id)) {
+          return {
+            reason: 'invalid-channel',
+            response: message.reply('You can only save a party channel from deletion!')
+          };
         }
         if (!Helper.isBotManagement(message)) {
-          return ['unauthorized', message.reply('You are not authorized to use this command.')];
+          return {
+            reason: 'unauthorized',
+            response: message.reply('You are not authorized to use this command.')
+          };
         }
       }
       return false;
@@ -39,7 +45,8 @@ class SavePartyCommand extends Commando.Command {
     party.deletionTime = -1;
     await party.persist();
 
-    party.sendSavedWarningMessage();
+    party.sendSavedWarningMessage()
+      .catch(err => log.error(err));
 
     message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
       .catch(err => log.error(err));

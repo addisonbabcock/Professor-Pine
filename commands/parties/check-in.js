@@ -16,7 +16,7 @@ class CheckInCommand extends Commando.Command {
       name: 'here',
       group: CommandGroup.BASIC_RAID,
       memberName: 'here',
-      aliases: ['arrive', 'arrived', 'present', 'check-in', 'herre', 'herr'],
+      aliases: ['ready', 'arrive', 'arrived', 'present', 'check-in', 'herre', 'herr'],
       description: 'Lets others know you have arrived at an active raid.',
       details: 'Use this command to tell everyone you are at the raid location and to ensure that no one is left behind.',
       examples: ['\t!here +1', '\t!arrived', '\t!present'],
@@ -38,17 +38,21 @@ class CheckInCommand extends Commando.Command {
     client.dispatcher.addInhibitor(message => {
       if (!!message.command && message.command.name === 'here' &&
         !PartyManager.validParty(message.channel.id)) {
-        return ['invalid-channel', message.reply('Check into a raid from its raid channel!')];
+        return {
+          reason: 'invalid-channel',
+          response: message.reply('Check into a raid from its raid channel!')
+        };
       }
       return false;
     });
   }
 
   async run(message, args) {
-    const additionalAttendees = args['additionalAttendees'],
+    const {additionalAttendees, isReaction, reactionMemberId} = args,
+      memberId = reactionMemberId || message.member.id,
       groupId = typeof additionalAttendees === 'string' && additionalAttendees !== NaturalArgumentType.UNDEFINED_NUMBER ? additionalAttendees : false,
       raid = PartyManager.getParty(message.channel.id),
-      currentStatus = raid.getMemberStatus(message.member.id),
+      currentStatus = raid.getMemberStatus(memberId),
       groupCount = raid.groups.length;
 
     let statusPromise;
@@ -103,32 +107,34 @@ class CheckInCommand extends Commando.Command {
             groupId = collectionResult.values['group'];
           }
 
-          await raid.setMemberGroup(message.member.id, groupId);
-          return raid.setMemberStatus(message.member.id, PartyStatus.PRESENT, additionalAttendees);
+          await raid.setMemberGroup(memberId, groupId);
+          return raid.setMemberStatus(memberId, PartyStatus.PRESENT, additionalAttendees);
         });
     } else if (groupId && currentStatus === PartyStatus.PRESENT) {
       statusPromise = Promise.all([
-        await raid.setMemberGroup(message.member.id, groupId),
-        await raid.setMemberStatus(message.member.id, PartyStatus.PRESENT)]);
+        await raid.setMemberGroup(memberId, groupId),
+        await raid.setMemberStatus(memberId, PartyStatus.PRESENT)]);
     } else if (groupId && currentStatus !== PartyStatus.NOT_INTERESTED) {
-      const attendee = await raid.getAttendee(message.member.id),
+      const attendee = await raid.getAttendee(memberId),
         additional = attendee.number - 1;
       statusPromise = Promise.all([
-        await raid.setMemberGroup(message.member.id, groupId),
-        await raid.setMemberStatus(message.member.id, PartyStatus.PRESENT, additional)]);
+        await raid.setMemberGroup(memberId, groupId),
+        await raid.setMemberStatus(memberId, PartyStatus.PRESENT, additional)]);
     } else {
       statusPromise = Promise.resolve(
-        await raid.setMemberStatus(message.member.id, PartyStatus.PRESENT, groupId ? 0 : additionalAttendees));
+        await raid.setMemberStatus(memberId, PartyStatus.PRESENT, groupId ? 0 : additionalAttendees));
     }
 
     statusPromise.then(info => {
       if (!info.error) {
-        message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
-          .catch(err => log.error(err));
+        if (!isReaction) {
+          message.react(Helper.getEmoji(settings.emoji.thumbsUp) || '👍')
+            .catch(err => log.error(err));
+        }
 
         raid.refreshStatusMessages()
           .catch(err => log.error(err));
-      } else {
+      } else if (!isReaction) {
         message.reply(info.error)
           .catch(err => log.error(err));
       }
